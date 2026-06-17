@@ -1,8 +1,6 @@
 Mermaid code - Class Diagram:
 
 classDiagram
-    direction TB
-
     class GymOwner {
         +String ownerID
         +String name
@@ -10,19 +8,11 @@ classDiagram
         +registerGym()
         +updateMachineStatus()
     }
-
     class Gym {
         +String gymID
         +String location
         +Int capacity
     }
-
-    class Machine {
-        +String machineID
-        +String type
-        +String status
-    }
-
     class User {
         +String userID
         +String name
@@ -30,13 +20,6 @@ classDiagram
         +createRoutine()
         +makeBooking()
     }
-
-    class WorkoutRoutine {
-        +String routineID
-        +String name
-        +Int estimatedDuration
-    }
-
     class Booking {
         +String bookingID
         +Date date
@@ -46,14 +29,28 @@ classDiagram
         +confirm()
         +cancel()
     }
+    class WorkoutRoutine {
+        +String routineID
+        +String name
+        +Int totalDuration
+    }
+    class MachineType {
+        +String typeID
+        +String categoryName
+        +Int avgExerciseDuration
+    }
+    class Machine {
+        +String machineID
+        +String status
+    }
 
-    %% Relationships
     GymOwner "1" -- "1..*" Gym : manages >
     Gym "1" *-- "1..*" Machine : contains >
+    Machine "1..*" -- "1" MachineType : categorized as >
     User "1" -- "0..*" WorkoutRoutine : creates >
-    WorkoutRoutine "1..*" -- "1..*" Machine : requires >
     User "1" -- "0..*" Booking : makes >
-    Booking "1..*" -- "1" WorkoutRoutine : executes >
+    Booking "0..*" -- "1" WorkoutRoutine : executes >
+    WorkoutRoutine "1..*" -- "1..*" MachineType : requires >
 
 ---------------------------------------------------------------
 
@@ -63,15 +60,22 @@ sequenceDiagram
     participant User
     participant System
     participant Database
-
     User->>System: Selects Routine and Time Slot
-    System->>Database: Query Machine Occupancy
-    Database-->>System: Return Availability Data
-    System->>System: Calculate Predicted Waiting Time
-    System-->>User: Display Occupancy & Alternatives
-    User->>System: Confirm Booking
-    System->>Database: Save Booking Record
-    System-->>User: Confirmation Notification
+    System->>Database: Query operational machines (M) & avg duration
+    Database-->>System: Return MachineType metrics
+    System->>Database: Query aggregated demand for time slot
+    Database-->>System: Return current occupancy
+    System->>System: Calculate C_max and evaluate availability
+    System-->>User: Display Occupancy & Expected Wait
+    
+    alt User accepts wait time
+        User->>System: Confirm Booking
+        System->>Database: Save Booking Record
+        System-->>User: Confirmation Notification
+    else User declines wait time
+        User->>System: Cancel Booking Request
+        System-->>User: Return to Dashboard
+    end
 
 ---------------------------------------------------------------
 
@@ -81,14 +85,19 @@ sequenceDiagram
     participant Owner
     participant System
     participant Database
-
-    Owner->>System: Update Machine Status (Broken)
-    System->>Database: Save Machine Status
-    System->>Database: Fetch Bookings involving Machine
-    Database-->>System: Return affected Bookings
-    System->>Database: Invalidate/Cancel Bookings
+    participant User
+    Owner->>System: Update Physical Machine Status (Broken)
+    System->>Database: Save Machine Status & decrement M
+    System->>Database: Fetch upcoming bookings for MachineType
+    Database-->>System: Return bookings list
+    System->>System: Recalculate C_max with new M
+    
+    opt Demand > New C_max
+        System->>Database: Invalidate bookings exceeding new C_max
+        System-->>User: Send Cancellation & Reschedule Notification
+    end
+    
     System-->>Owner: Confirmation of Update
-    System-->>Database: Send Notification to affected Users
 
 ---------------------------------------------------------------
 
@@ -98,14 +107,21 @@ sequenceDiagram
     participant User
     participant System
     participant Database
-
     User->>System: Request Routine during Peak Hour
-    System->>Database: Query Real-time Occupancy
+    System->>Database: Query MachineType capacity (C_max) & demand
     Database-->>System: Return High Load Data
-    System->>System: Calculate Optimization Logic
-    System-->>User: Suggest Alternative Slot/Order
-    User->>System: Accept Suggestion
-    System->>Database: Update Booking
+    System->>System: Detect Demand > C_max (Bottleneck)
+    System->>System: Calculate Optimization Logic (Time/Order)
+    System-->>User: Suggest Alternative Slot or Routine Order
+    
+    alt User Accepts Suggestion
+        User->>System: Accept Suggestion
+        System->>Database: Update and Save Booking
+        System-->>User: Booking Confirmed
+    else User Rejects Suggestion
+        User->>System: Decline Suggestion
+        System-->>User: Abort Booking / Return to Selection
+    end
 
 ---------------------------------------------------------------
 
@@ -113,13 +129,10 @@ Mermaid Code - Machine FSM:
 
 stateDiagram-v2
     [*] --> Available
-    Available --> Occupied: Booked
-    Occupied --> Available: Slot Ends
-    Available --> Broken: Damage Reported
-    Occupied --> Broken: Damage Reported
-    Broken --> Available: Repaired
-    Available --> UnderMaintenance: Service Start
-    UnderMaintenance --> Available: Service Complete
+    Available --> Broken : Damage Reported
+    Available --> UnderMaintenance : Service Start
+    Broken --> Available : Repaired
+    UnderMaintenance --> Available : Service Complete
 
 ---------------------------------------------------------------
 
@@ -127,8 +140,9 @@ Mermaid Code - Booking FSM:
 
 stateDiagram-v2
     [*] --> Pending
-    Pending --> Confirmed: Validation Success
-    Pending --> Cancelled: Machine Broken
-    Pending --> Cancelled: User Cancel
-    Confirmed --> Completed: Time Ends
-    Confirmed --> Cancelled: Machine Broken
+    Pending --> Confirmed : Validation Success
+    Pending --> Cancelled : User Cancel
+    Pending --> Cancelled : Capacity Exceeded (M Reduced)
+    Confirmed --> Completed : Time Ends
+    Confirmed --> Cancelled : Capacity Exceeded (M Reduced)
+    Confirmed --> Cancelled : User Cancel
