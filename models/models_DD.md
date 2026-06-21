@@ -136,3 +136,64 @@ graph TD
     
     LM-->>API: 200 OK
     API-->>UI: Display Success Message
+
+    --------------------------------------------------------------- 
+
+    Mermaid Code - Entity-Relationship Diagram:
+
+    erDiagram
+    GYM_OWNER {
+        uuid owner_id PK
+        string name
+        string contact_info
+    }
+    GYM {
+        uuid gym_id PK
+        string location
+        int total_capacity
+        uuid owner_id FK
+    }
+    USER {
+        uuid user_id PK
+        string name
+        string email
+    }
+    MACHINE_TYPE {
+        uuid type_id PK
+        string category_name
+        int avg_exercise_duration
+    }
+    MACHINE {
+        uuid machine_id PK
+        string status
+        uuid gym_id FK
+        uuid type_id FK
+    }
+    WORKOUT_ROUTINE {
+        uuid routine_id PK
+        string name
+        int total_duration
+        uuid user_id FK
+    }
+    ROUTINE_MACHINE_TYPE {
+        uuid routine_id PK,FK
+        uuid type_id PK,FK
+    }
+    BOOKING {
+        uuid booking_id PK
+        date booking_date
+        time start_time
+        time end_time
+        string status
+        uuid user_id FK
+        uuid routine_id FK
+    }
+
+    GYM_OWNER ||--|{ GYM : manages
+    GYM ||--|{ MACHINE : contains
+    MACHINE_TYPE ||--|{ MACHINE : categorizes
+    USER ||--|{ WORKOUT_ROUTINE : creates
+    USER ||--|{ BOOKING : makes
+    WORKOUT_ROUTINE ||--|{ ROUTINE_MACHINE_TYPE : requires
+    MACHINE_TYPE ||--|{ ROUTINE_MACHINE_TYPE : required_by
+    WORKOUT_ROUTINE ||--o{ BOOKING : executed_in
